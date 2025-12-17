@@ -1,365 +1,406 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Zap, CheckCircle, XCircle, AlertTriangle, Loader2, User, MapPin, Wifi, Activity } from 'lucide-react';
+import { Search, Loader2, CheckCircle, XCircle, AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { executarDiagnosticoCompleto, buscarClientePorFiltro } from '../actions/diagnostico-actions';
-
-interface Cliente {
-  id: string;
-  nome: string;
-  cpf_cnpj: string;
-  contrato: string;
-  endereco: string;
-  bairro: string;
-  cidade: string;
-  telefone: string;
-  plano: string;
-  tecnologia: string;
-}
-
-interface DadosFibra {
-  olt: string;
-  porta_pon: string;
-  onu: string;
-  status_onu: 'online' | 'offline';
-  potencia_rx: string;
-  potencia_tx: string;
-  alarmes: string[];
-}
-
-interface ResultadoDiagnostico {
-  status: 'success' | 'error';
-  decisao: 'resolver_remoto' | 'despachar_tecnico' | 'orientar_cliente';
-  laudo: string;
-  testes: Array<{
-    nome: string;
-    status: 'success' | 'warning' | 'error' | 'pending';
-    resultado: string;
-  }>;
-  tecnico_despachado?: {
-    nome: string;
-    telefone: string;
-    previsao: string;
-  };
-}
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { buscarCliente, executarDiagnosticoAutomatico } from '../actions/diagnostico-actions';
+import type { ClienteDiagnostico, ResultadoDiagnostico } from '@/lib/types-diagnostico';
 
 export default function DiagnosticoPage() {
-  const [busca, setBusca] = useState('');
-  const [tipoBusca, setTipoBusca] = useState<'nome' | 'cpf' | 'codigo' | 'os'>('nome');
-  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
-  const [dadosFibra, setDadosFibra] = useState<DadosFibra | null>(null);
-  const [diagnostico, setDiagnostico] = useState<ResultadoDiagnostico | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [tipoBusca, setTipoBusca] = useState<'id' | 'nome' | 'cpf' | 'os'>('nome');
+  const [termoBusca, setTermoBusca] = useState('');
+  const [buscando, setBuscando] = useState(false);
   const [diagnosticando, setDiagnosticando] = useState(false);
+  const [cliente, setCliente] = useState<ClienteDiagnostico | null>(null);
+  const [resultado, setResultado] = useState<ResultadoDiagnostico | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const buscarCliente = async () => {
-    if (!busca.trim()) return;
+  const handleBuscarCliente = async () => {
+    if (!termoBusca.trim()) {
+      setErro('Digite um termo para buscar');
+      return;
+    }
 
-    setLoading(true);
+    setBuscando(true);
+    setErro(null);
+    setCliente(null);
+    setResultado(null);
+
     try {
-      const resultado = await buscarClientePorFiltro(tipoBusca, busca);
+      const clienteEncontrado = await buscarCliente(tipoBusca, termoBusca);
       
-      if (resultado.success && resultado.cliente) {
-        setClienteSelecionado(resultado.cliente);
-        setDadosFibra(resultado.dadosFibra || null);
-        setDiagnostico(null);
-      } else {
-        alert(resultado.message || 'Cliente não encontrado');
+      if (!clienteEncontrado) {
+        setErro('Cliente não encontrado');
+        return;
       }
+
+      setCliente(clienteEncontrado);
     } catch (error) {
-      alert('Erro ao buscar cliente');
+      setErro('Erro ao buscar cliente. Tente novamente.');
+      console.error(error);
     } finally {
-      setLoading(false);
+      setBuscando(false);
     }
   };
 
-  const executarDiagnostico = async () => {
-    if (!clienteSelecionado) return;
+  const handleExecutarDiagnostico = async () => {
+    if (!cliente) return;
 
     setDiagnosticando(true);
-    setDiagnostico(null);
+    setErro(null);
 
     try {
-      const resultado = await executarDiagnosticoCompleto(clienteSelecionado.id);
-      
-      if (resultado.success && resultado.diagnostico) {
-        setDiagnostico(resultado.diagnostico);
-      } else {
-        alert(resultado.message || 'Erro ao executar diagnóstico');
-      }
+      const resultadoDiag = await executarDiagnosticoAutomatico(cliente.id);
+      setResultado(resultadoDiag);
     } catch (error) {
-      alert('Erro ao executar diagnóstico');
+      setErro('Erro ao executar diagnóstico. Tente novamente.');
+      console.error(error);
     } finally {
       setDiagnosticando(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'warning':
-        return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
-      case 'error':
-        return <XCircle className="w-5 h-5 text-red-500" />;
-      default:
-        return <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />;
-    }
-  };
-
-  const getDecisaoColor = (decisao: string) => {
-    switch (decisao) {
-      case 'resolver_remoto':
-        return 'bg-green-500';
-      case 'orientar_cliente':
-        return 'bg-blue-500';
-      case 'despachar_tecnico':
-        return 'bg-orange-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-
-  const getDecisaoTexto = (decisao: string) => {
-    switch (decisao) {
-      case 'resolver_remoto':
-        return 'Resolvido Remotamente';
-      case 'orientar_cliente':
-        return 'Orientação ao Cliente';
-      case 'despachar_tecnico':
-        return 'Técnico Despachado';
-      default:
-        return 'Processando';
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-900 dark:to-gray-800 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Diagnóstico Automático
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Diagnóstico completo com IA em um único clique
+            <h1 className="text-3xl font-bold text-gray-900">Diagnóstico Automático</h1>
+            <p className="text-gray-600 mt-1">
+              Execute diagnósticos completos com um único clique
             </p>
           </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-lg">
-            <Zap className="w-5 h-5" />
+          <div className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white">
+            <Zap className="h-5 w-5" />
             <span className="font-semibold">IA Ativa</span>
           </div>
         </div>
 
         {/* Busca de Cliente */}
         <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            1️⃣ Selecionar Cliente
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            1. Buscar Cliente
           </h2>
           
-          <div className="flex gap-4 mb-4">
-            <select
-              value={tipoBusca}
-              onChange={(e) => setTipoBusca(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            >
-              <option value="nome">Nome</option>
-              <option value="cpf">CPF/CNPJ</option>
-              <option value="codigo">Código Cliente</option>
-              <option value="os">Número O.S.</option>
-            </select>
+          <div className="grid gap-4 md:grid-cols-[200px_1fr_auto]">
+            <div>
+              <Label>Buscar por</Label>
+              <Select value={tipoBusca} onValueChange={(v: any) => setTipoBusca(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nome">Nome</SelectItem>
+                  <SelectItem value="cpf">CPF/CNPJ</SelectItem>
+                  <SelectItem value="id">Código Cliente</SelectItem>
+                  <SelectItem value="os">Número O.S.</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            <div className="flex-1 flex gap-2">
+            <div>
+              <Label>
+                {tipoBusca === 'nome' && 'Nome do Cliente'}
+                {tipoBusca === 'cpf' && 'CPF/CNPJ'}
+                {tipoBusca === 'id' && 'Código do Cliente'}
+                {tipoBusca === 'os' && 'Número da O.S.'}
+              </Label>
               <Input
-                placeholder={`Buscar por ${tipoBusca}...`}
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && buscarCliente()}
-                className="flex-1"
+                placeholder={
+                  tipoBusca === 'nome' ? 'Digite o nome completo' :
+                  tipoBusca === 'cpf' ? 'Digite o CPF/CNPJ' :
+                  tipoBusca === 'id' ? 'Digite o código' :
+                  'Digite o número da O.S.'
+                }
+                value={termoBusca}
+                onChange={(e) => setTermoBusca(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleBuscarCliente()}
               />
-              <Button onClick={buscarCliente} disabled={loading}>
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                onClick={handleBuscarCliente}
+                disabled={buscando}
+                className="w-full md:w-auto"
+              >
+                {buscando ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Buscando...
+                  </>
                 ) : (
-                  <Search className="w-4 h-4" />
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Buscar
+                  </>
                 )}
               </Button>
             </div>
           </div>
 
-          {/* Dados do Cliente */}
-          {clienteSelecionado && (
-            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-start gap-3">
-                  <User className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-1" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Cliente</p>
-                    <p className="font-semibold text-gray-900 dark:text-white">{clienteSelecionado.nome}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Contrato: {clienteSelecionado.contrato} | {clienteSelecionado.plano}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-1" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Endereço</p>
-                    <p className="font-semibold text-gray-900 dark:text-white">{clienteSelecionado.endereco}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {clienteSelecionado.bairro} - {clienteSelecionado.cidade}
-                    </p>
-                  </div>
-                </div>
+          {erro && !cliente && (
+            <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-4 flex items-start gap-3">
+              <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-red-900">Erro</p>
+                <p className="text-sm text-red-700">{erro}</p>
               </div>
             </div>
           )}
         </Card>
 
-        {/* Dados da Fibra */}
-        {dadosFibra && (
+        {/* Dados do Cliente */}
+        {cliente && (
           <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
-              <Wifi className="w-5 h-5" />
-              Dados da Rede (Fibra)
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              2. Dados do Cliente
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400">OLT / Porta PON</p>
-                <p className="font-semibold text-gray-900 dark:text-white">{dadosFibra.olt}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{dadosFibra.porta_pon}</p>
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Informações Básicas */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Informações Básicas</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Nome:</span>
+                      <span className="font-medium text-gray-900">{cliente.nome}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Contrato:</span>
+                      <span className="font-medium text-gray-900">{cliente.contrato}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Plano:</span>
+                      <span className="font-medium text-gray-900">{cliente.plano}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Endereço:</span>
+                      <span className="font-medium text-gray-900 text-right">{cliente.endereco}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tecnologia:</span>
+                      <Badge className="bg-blue-100 text-blue-700">Fibra Óptica</Badge>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400">ONU</p>
-                <p className="font-semibold text-gray-900 dark:text-white">{dadosFibra.onu}</p>
-                <Badge className={dadosFibra.status_onu === 'online' ? 'bg-green-500' : 'bg-red-500'}>
-                  {dadosFibra.status_onu.toUpperCase()}
-                </Badge>
-              </div>
-
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Potência</p>
-                <p className="text-sm text-gray-900 dark:text-white">RX: {dadosFibra.potencia_rx}</p>
-                <p className="text-sm text-gray-900 dark:text-white">TX: {dadosFibra.potencia_tx}</p>
+              {/* Dados de Rede */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Dados de Rede (Fibra)</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">OLT:</span>
+                      <span className="font-medium text-gray-900">{cliente.dados_fibra.olt}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Porta PON:</span>
+                      <span className="font-medium text-gray-900">{cliente.dados_fibra.porta_pon}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ONU:</span>
+                      <span className="font-medium text-gray-900">{cliente.dados_fibra.onu}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status ONU:</span>
+                      <Badge className={
+                        cliente.dados_fibra.status_onu === 'online' 
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }>
+                        {cliente.dados_fibra.status_onu === 'online' ? 'Online' : 'Offline'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Potência RX:</span>
+                      <span className={`font-medium ${
+                        parseFloat(cliente.dados_fibra.potencia_rx) > -25 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                      }`}>
+                        {cliente.dados_fibra.potencia_rx} dBm
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Potência TX:</span>
+                      <span className="font-medium text-gray-900">{cliente.dados_fibra.potencia_tx} dBm</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {dadosFibra.alarmes.length > 0 && (
-              <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="font-semibold text-red-700 dark:text-red-400 mb-2">⚠️ Alarmes Ativos:</p>
-                <ul className="list-disc list-inside text-sm text-red-600 dark:text-red-400">
-                  {dadosFibra.alarmes.map((alarme, idx) => (
-                    <li key={idx}>{alarme}</li>
-                  ))}
-                </ul>
+            {/* Alarmes Ativos */}
+            {cliente.dados_fibra.alarmes.length > 0 && (
+              <div className="mt-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-yellow-900">Alarmes Ativos</p>
+                    <ul className="mt-2 space-y-1 text-sm text-yellow-800">
+                      {cliente.dados_fibra.alarmes.map((alarme, idx) => (
+                        <li key={idx}>• {alarme}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
             )}
-          </Card>
-        )}
 
-        {/* Botão de Diagnóstico */}
-        {clienteSelecionado && (
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-              2️⃣ Executar Diagnóstico
-            </h2>
-
-            <Button
-              onClick={executarDiagnostico}
-              disabled={diagnosticando}
-              className="w-full h-16 text-lg font-semibold bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-            >
-              {diagnosticando ? (
-                <>
-                  <Loader2 className="w-6 h-6 mr-2 animate-spin" />
-                  Executando Diagnóstico Automático...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-6 h-6 mr-2" />
-                  Executar Diagnóstico Automático
-                </>
-              )}
-            </Button>
-
-            <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-2">
-              A IA irá analisar, testar e resolver automaticamente
-            </p>
+            {/* Botão de Diagnóstico */}
+            <div className="mt-6 pt-6 border-t">
+              <Button
+                onClick={handleExecutarDiagnostico}
+                disabled={diagnosticando}
+                size="lg"
+                className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold"
+              >
+                {diagnosticando ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Executando Diagnóstico Automático...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-5 w-5" />
+                    Executar Diagnóstico Automático
+                  </>
+                )}
+              </Button>
+              <p className="text-center text-sm text-gray-600 mt-2">
+                A IA irá analisar, testar e resolver automaticamente
+              </p>
+            </div>
           </Card>
         )}
 
         {/* Resultado do Diagnóstico */}
-        {diagnostico && (
+        {resultado && (
           <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
-              <Activity className="w-5 h-5" />
-              Resultado do Diagnóstico
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              3. Resultado do Diagnóstico
             </h2>
 
             {/* Status Final */}
-            <div className={`p-6 rounded-lg ${getDecisaoColor(diagnostico.decisao)} text-white mb-6`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm opacity-90">Status Final</p>
-                  <p className="text-2xl font-bold">{getDecisaoTexto(diagnostico.decisao)}</p>
+            <div className={`rounded-lg p-6 mb-6 ${
+              resultado.status_final === 'resolvido'
+                ? 'bg-green-50 border border-green-200'
+                : 'bg-orange-50 border border-orange-200'
+            }`}>
+              <div className="flex items-start gap-4">
+                {resultado.status_final === 'resolvido' ? (
+                  <CheckCircle className="h-8 w-8 text-green-600 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-8 w-8 text-orange-600 flex-shrink-0" />
+                )}
+                <div className="flex-1">
+                  <h3 className={`text-lg font-semibold ${
+                    resultado.status_final === 'resolvido' ? 'text-green-900' : 'text-orange-900'
+                  }`}>
+                    {resultado.status_final === 'resolvido' 
+                      ? '✅ Problema Resolvido Remotamente'
+                      : '🔧 Técnico Despachado'
+                    }
+                  </h3>
+                  <p className={`text-sm mt-1 ${
+                    resultado.status_final === 'resolvido' ? 'text-green-700' : 'text-orange-700'
+                  }`}>
+                    {resultado.mensagem}
+                  </p>
                 </div>
-                {diagnostico.decisao === 'resolver_remoto' && (
-                  <CheckCircle className="w-12 h-12" />
-                )}
-                {diagnostico.decisao === 'despachar_tecnico' && (
-                  <AlertTriangle className="w-12 h-12" />
-                )}
               </div>
             </div>
 
-            {/* Laudo */}
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Laudo Técnico</p>
-              <p className="text-gray-900 dark:text-white">{diagnostico.laudo}</p>
+            {/* Análise da IA */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Análise da IA</h3>
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <p className="text-sm text-blue-900">{resultado.analise_ia}</p>
+              </div>
+            </div>
+
+            {/* Causa Provável */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Causa Provável</h3>
+              <div className="flex items-center gap-2">
+                <Badge className="bg-purple-100 text-purple-700 text-sm">
+                  {resultado.causa_provavel}
+                </Badge>
+              </div>
             </div>
 
             {/* Testes Executados */}
             <div className="mb-6">
-              <p className="font-semibold text-gray-900 dark:text-white mb-3">Testes Executados:</p>
+              <h3 className="font-semibold text-gray-900 mb-3">Testes Executados</h3>
               <div className="space-y-2">
-                {diagnostico.testes.map((teste, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                  >
-                    {getStatusIcon(teste.status)}
+                {resultado.testes_executados.map((teste, idx) => (
+                  <div key={idx} className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+                    {teste.status === 'success' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                    {teste.status === 'warning' && <AlertTriangle className="h-5 w-5 text-yellow-600" />}
+                    {teste.status === 'error' && <XCircle className="h-5 w-5 text-red-600" />}
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 dark:text-white">{teste.nome}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{teste.resultado}</p>
+                      <p className="font-medium text-gray-900 text-sm">{teste.nome}</p>
+                      <p className="text-xs text-gray-600">{teste.resultado}</p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Técnico Despachado */}
-            {diagnostico.tecnico_despachado && (
-              <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-                <p className="font-semibold text-orange-700 dark:text-orange-400 mb-2">
-                  🚚 Técnico Despachado
-                </p>
-                <p className="text-gray-900 dark:text-white">
-                  <strong>{diagnostico.tecnico_despachado.nome}</strong>
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Tel: {diagnostico.tecnico_despachado.telefone}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Previsão: {diagnostico.tecnico_despachado.previsao}
-                </p>
+            {/* Ações Executadas */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Ações Executadas</h3>
+              <ul className="space-y-2">
+                {resultado.acoes_executadas.map((acao, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="text-blue-600 font-bold">•</span>
+                    <span>{acao}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Próximo Passo */}
+            {resultado.proximo_passo && (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900 mb-2">Próximo Passo</h3>
+                <p className="text-sm text-gray-700">{resultado.proximo_passo}</p>
+              </div>
+            )}
+
+            {/* Técnico Atribuído (se despachado) */}
+            {resultado.tecnico_atribuido && (
+              <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
+                <h3 className="font-semibold text-blue-900 mb-2">Técnico Atribuído</h3>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Nome:</span>
+                    <span className="font-medium text-blue-900">{resultado.tecnico_atribuido.nome}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Região:</span>
+                    <span className="font-medium text-blue-900">{resultado.tecnico_atribuido.regiao}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Previsão:</span>
+                    <span className="font-medium text-blue-900">{resultado.tecnico_atribuido.previsao_chegada}</span>
+                  </div>
+                </div>
               </div>
             )}
           </Card>

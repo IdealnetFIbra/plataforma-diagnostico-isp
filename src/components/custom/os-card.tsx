@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { OrdemServico } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -49,15 +52,45 @@ export function OSCard({ os, onClick }: OSCardProps) {
   const priority = priorityConfig[os.prioridade];
   const StatusIcon = status.icon;
 
-  const slaMinutes = Math.floor((os.sla_expira_em.getTime() - new Date().getTime()) / 60000);
-  const slaHours = Math.floor(slaMinutes / 60);
-  const slaText = slaHours > 0 ? `${slaHours}h` : `${slaMinutes}min`;
-  const slaUrgent = slaMinutes < 60;
+  // Estado para armazenar o SLA calculado apenas no cliente
+  const [slaInfo, setSlaInfo] = useState<{
+    text: string;
+    urgent: boolean;
+    minutes: number;
+  }>({
+    text: 'Calculando...',
+    urgent: false,
+    minutes: 0
+  });
+
+  // Calcular SLA apenas no cliente para evitar hydration mismatch
+  useEffect(() => {
+    const calculateSLA = () => {
+      const slaMinutes = Math.floor((os.sla_expira_em.getTime() - new Date().getTime()) / 60000);
+      const slaHours = Math.floor(slaMinutes / 60);
+      const slaText = slaHours > 0 ? `${slaHours}h` : `${slaMinutes}min`;
+      const slaUrgent = slaMinutes < 60;
+
+      setSlaInfo({
+        text: slaText,
+        urgent: slaUrgent,
+        minutes: slaMinutes
+      });
+    };
+
+    // Calcular imediatamente
+    calculateSLA();
+
+    // Atualizar a cada minuto
+    const interval = setInterval(calculateSLA, 60000);
+
+    return () => clearInterval(interval);
+  }, [os.sla_expira_em]);
 
   return (
     <Card 
       className="p-5 hover:shadow-lg transition-all cursor-pointer border-l-4"
-      style={{ borderLeftColor: slaUrgent ? '#EF4444' : '#3B82F6' }}
+      style={{ borderLeftColor: slaInfo.urgent ? '#EF4444' : '#3B82F6' }}
       onClick={onClick}
     >
       <div className="space-y-4">
@@ -101,8 +134,8 @@ export function OSCard({ os, onClick }: OSCardProps) {
           </div>
           <div className="flex items-center gap-2 text-gray-600">
             <Clock className="h-4 w-4 flex-shrink-0" />
-            <span className={cn(slaUrgent && 'text-red-600 font-semibold')}>
-              SLA: {slaText}
+            <span className={cn(slaInfo.urgent && 'text-red-600 font-semibold')}>
+              SLA: {slaInfo.text}
             </span>
           </div>
         </div>

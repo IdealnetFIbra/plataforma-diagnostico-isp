@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   ClipboardList, 
@@ -28,7 +30,7 @@ const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: ClipboardList, label: 'Ordens de Serviço', href: '/os', badge: 47 },
   { icon: Activity, label: 'Diagnóstico', href: '/diagnostico' },
-  { icon: MapPin, label: 'Despacho', href: '/despacho' },
+  { icon: MapPin, label: 'Rotas', href: '/rotas' },
   { icon: Users, label: 'Técnicos', href: '/tecnicos' },
   { icon: TrendingUp, label: 'Métricas', href: '/metricas' },
   { icon: FileText, label: 'Relatórios', href: '/relatorios' },
@@ -38,7 +40,7 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeItem, setActiveItem] = useState('/');
+  const pathname = usePathname();
 
   return (
     <aside
@@ -52,12 +54,12 @@ export function Sidebar() {
         <nav className="flex-1 space-y-1 p-3">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeItem === item.href;
+            const isActive = pathname === item.href;
 
             return (
-              <button
+              <Link
                 key={item.href}
-                onClick={() => setActiveItem(item.href)}
+                href={item.href}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                   isActive
@@ -76,7 +78,7 @@ export function Sidebar() {
                     )}
                   </>
                 )}
-              </button>
+              </Link>
             );
           })}
         </nav>

@@ -1,217 +1,245 @@
 'use server';
 
-import { supabase } from '@/lib/supabase';
 import { ixcService } from '@/lib/services/ixc-service';
-import { aiDiagnosticService } from '@/lib/services/ai-diagnostic-service';
-import { dispatchService } from '@/lib/services/dispatch-service';
+import type { ClienteDiagnostico, ResultadoDiagnostico, TesteAutomatico } from '@/lib/types-diagnostico';
 
-interface BuscarClienteResult {
-  success: boolean;
-  message?: string;
-  cliente?: {
-    id: string;
-    nome: string;
-    cpf_cnpj: string;
-    contrato: string;
-    endereco: string;
-    bairro: string;
-    cidade: string;
-    telefone: string;
-    plano: string;
-    tecnologia: string;
-  };
-  dadosFibra?: {
-    olt: string;
-    porta_pon: string;
-    onu: string;
-    status_onu: 'online' | 'offline';
-    potencia_rx: string;
-    potencia_tx: string;
-    alarmes: string[];
-  };
-}
-
-interface DiagnosticoResult {
-  success: boolean;
-  message?: string;
-  diagnostico?: {
-    status: 'success' | 'error';
-    decisao: 'resolver_remoto' | 'despachar_tecnico' | 'orientar_cliente';
-    laudo: string;
-    testes: Array<{
-      nome: string;
-      status: 'success' | 'warning' | 'error' | 'pending';
-      resultado: string;
-    }>;
-    tecnico_despachado?: {
-      nome: string;
-      telefone: string;
-      previsao: string;
-    };
-  };
-}
-
-export async function buscarClientePorFiltro(
-  tipo: 'nome' | 'cpf' | 'codigo' | 'os',
-  valor: string
-): Promise<BuscarClienteResult> {
+// Simula busca de cliente (integração real com IXC)
+export async function buscarCliente(
+  tipo: 'id' | 'nome' | 'cpf' | 'os',
+  termo: string
+): Promise<ClienteDiagnostico | null> {
   try {
-    let query = supabase.from('clientes').select('*');
+    // Aqui você faria a busca real no IXC
+    // Por enquanto, retornando dados simulados para demonstração
+    
+    // Simulação de delay de API
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    switch (tipo) {
-      case 'nome':
-        query = query.ilike('nome', `%${valor}%`);
-        break;
-      case 'cpf':
-        query = query.eq('cpf_cnpj', valor.replace(/\D/g, ''));
-        break;
-      case 'codigo':
-        query = query.eq('ixc_id', valor);
-        break;
-      case 'os':
-        // Buscar por número de O.S.
-        const { data: os } = await supabase
-          .from('ordens_servico')
-          .select('cliente_id')
-          .eq('numero_os', valor)
-          .single();
-        
-        if (os) {
-          query = query.eq('id', os.cliente_id);
-        } else {
-          return { success: false, message: 'O.S. não encontrada' };
-        }
-        break;
-    }
-
-    const { data: cliente, error } = await query.single();
-
-    if (error || !cliente) {
-      return { success: false, message: 'Cliente não encontrado' };
-    }
-
-    // Buscar dados da fibra (simulado - integração real com OLT/ONU)
-    const dadosFibra = await buscarDadosFibra(cliente.ixc_id);
-
-    return {
-      success: true,
-      cliente: {
-        id: cliente.id,
-        nome: cliente.nome,
-        cpf_cnpj: cliente.cpf_cnpj || 'N/A',
-        contrato: cliente.contrato,
-        endereco: cliente.endereco,
-        bairro: cliente.bairro,
-        cidade: cliente.cidade,
-        telefone: cliente.telefone,
-        plano: cliente.plano,
-        tecnologia: 'Fibra Óptica',
+    // Dados simulados - substituir por integração real IXC
+    const clienteSimulado: ClienteDiagnostico = {
+      id: '12345',
+      nome: tipo === 'nome' ? termo : 'João Silva Santos',
+      contrato: 'CTR-2024-001',
+      endereco: 'Rua das Flores, 123 - Centro',
+      bairro: 'Centro',
+      cidade: 'São Paulo',
+      telefone: '(11) 98765-4321',
+      plano: 'Fibra 500MB',
+      pop: 'POP-CENTRO-01',
+      dados_fibra: {
+        olt: 'OLT-SP-01',
+        porta_pon: 'PON 1/1/5',
+        onu: 'ONU-12345',
+        status_onu: Math.random() > 0.3 ? 'online' : 'offline',
+        potencia_rx: (Math.random() * -10 - 15).toFixed(2),
+        potencia_tx: (Math.random() * 5 + 2).toFixed(2),
+        historico_quedas: Math.floor(Math.random() * 5),
+        alarmes: Math.random() > 0.7 ? ['LOS - Loss of Signal'] : [],
+        ultimo_reboot: '2024-01-15 14:30:00',
       },
-      dadosFibra,
+      dados_wifi: {
+        canal: '6 (2.4GHz)',
+        intensidade_sinal: '-65 dBm',
+        interferencia: 'Baixa',
+        dispositivos_conectados: 8,
+        ultimo_reboot: '2024-01-15 14:30:00',
+      },
     };
+
+    return clienteSimulado;
   } catch (error) {
     console.error('Erro ao buscar cliente:', error);
-    return { success: false, message: 'Erro ao buscar cliente' };
+    return null;
   }
 }
 
-async function buscarDadosFibra(ixcId: string) {
-  try {
-    // Simulação de dados da fibra
-    // Em produção, isso viria de integração real com OLT/ONU
-    const statusConexao = await ixcService.verificarStatusConexao(ixcId);
-
-    return {
-      olt: 'OLT-01-CENTRO',
-      porta_pon: 'PON 1/1/4',
-      onu: `ONU-${ixcId}`,
-      status_onu: statusConexao.online ? 'online' as const : 'offline' as const,
-      potencia_rx: '-18.5 dBm',
-      potencia_tx: '2.3 dBm',
-      alarmes: statusConexao.online ? [] : ['LOS - Loss of Signal'],
-    };
-  } catch (error) {
-    console.error('Erro ao buscar dados fibra:', error);
-    return {
-      olt: 'N/A',
-      porta_pon: 'N/A',
-      onu: 'N/A',
-      status_onu: 'offline' as const,
-      potencia_rx: 'N/A',
-      potencia_tx: 'N/A',
-      alarmes: ['Erro ao obter dados'],
-    };
-  }
-}
-
-export async function executarDiagnosticoCompleto(
+// Executa diagnóstico automático completo
+export async function executarDiagnosticoAutomatico(
   clienteId: string
-): Promise<DiagnosticoResult> {
+): Promise<ResultadoDiagnostico> {
   try {
-    // 1. Criar O.S. temporária para diagnóstico
-    const { data: os, error: osError } = await supabase
-      .from('ordens_servico')
-      .insert({
-        cliente_id: clienteId,
-        numero_os: `DIAG-${Date.now()}`,
-        status: 'diagnosing',
-        prioridade: 'high',
-        problema_relatado: 'Diagnóstico automático solicitado pelo operador',
-        origem: 'diagnostico_manual',
-      })
-      .select()
-      .single();
+    // Simulação de processamento da IA
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    if (osError || !os) {
-      return { success: false, message: 'Erro ao criar O.S. de diagnóstico' };
-    }
-
-    // 2. Executar diagnóstico com IA
-    const diagnostico = await aiDiagnosticService.diagnosticar(os.id);
-
-    if (!diagnostico) {
-      return { success: false, message: 'Erro ao executar diagnóstico' };
-    }
-
-    // 3. Se decisão for despachar técnico, fazer despacho automático
-    let tecnicoDespachado = undefined;
-    if (diagnostico.decisao === 'despachar_tecnico') {
-      const despacho = await dispatchService.despacharAutomatico(os.id);
-      
-      if (despacho) {
-        const { data: tecnico } = await supabase
-          .from('tecnicos')
-          .select('nome, telefone')
-          .eq('id', despacho.tecnico_id)
-          .single();
-
-        if (tecnico) {
-          tecnicoDespachado = {
-            nome: tecnico.nome,
-            telefone: tecnico.telefone,
-            previsao: new Date(despacho.previsao_chegada).toLocaleString('pt-BR'),
-          };
-        }
-      }
-    }
-
-    // 4. Retornar resultado
-    return {
-      success: true,
-      diagnostico: {
+    // 1. Executar testes automáticos
+    const testes: TesteAutomatico[] = [
+      {
+        nome: 'Validação de Conectividade',
         status: 'success',
-        decisao: diagnostico.decisao,
-        laudo: diagnostico.laudo,
-        testes: diagnostico.testes.map(t => ({
-          nome: t.nome,
-          status: t.status,
-          resultado: t.resultado,
-        })),
-        tecnico_despachado: tecnicoDespachado,
+        resultado: 'Cliente conectado com IPv4 ativo',
+        timestamp: new Date(),
       },
-    };
+      {
+        nome: 'Validação de Autenticação',
+        status: 'success',
+        resultado: 'Autenticação PPPoE válida',
+        timestamp: new Date(),
+      },
+      {
+        nome: 'Qualidade do Sinal Fibra',
+        status: Math.random() > 0.5 ? 'success' : 'warning',
+        resultado: 'Potência RX: -18.5 dBm (Ótimo)',
+        timestamp: new Date(),
+      },
+      {
+        nome: 'Análise de Wi-Fi',
+        status: 'success',
+        resultado: 'Sinal forte, sem interferências críticas',
+        timestamp: new Date(),
+      },
+      {
+        nome: 'Verificação de Falha em Massa',
+        status: 'success',
+        resultado: 'Sem incidentes na região',
+        timestamp: new Date(),
+      },
+    ];
+
+    // 2. Determinar se foi resolvido ou precisa de técnico
+    const foiResolvido = Math.random() > 0.4; // 60% de chance de resolver
+
+    if (foiResolvido) {
+      // CASO 1: Problema Resolvido
+      return {
+        status_final: 'resolvido',
+        causa_provavel: 'Instabilidade temporária de conexão',
+        analise_ia: 'A IA identificou uma instabilidade temporária na conexão PPPoE. Após reprocessamento automático da autenticação e validação dos parâmetros de rede, o cliente foi reconectado com sucesso. Todos os testes de conectividade e qualidade de sinal estão dentro dos padrões esperados.',
+        testes_executados: testes,
+        acoes_executadas: [
+          'Reprocessamento da autenticação PPPoE',
+          'Validação de parâmetros de rede',
+          'Verificação de qualidade do sinal óptico',
+          'Teste de latência e perda de pacotes',
+          'Confirmação de IPv4 ativo',
+        ],
+        mensagem: 'Conexão normalizada com sucesso. Cliente online com IPv4 ativo.',
+        proximo_passo: 'Monitorar estabilidade nas próximas 24 horas',
+        laudo_completo: 'Diagnóstico automático executado com sucesso. Cliente apresentava instabilidade temporária na conexão PPPoE. Sistema executou reprocessamento automático da autenticação, validou todos os parâmetros de rede e confirmou reconexão bem-sucedida. Qualidade do sinal óptico dentro dos padrões (RX: -18.5 dBm). Sem necessidade de intervenção técnica presencial.',
+        timestamp: new Date(),
+      };
+    } else {
+      // CASO 2: Precisa de Técnico
+      return {
+        status_final: 'despachado',
+        causa_provavel: 'Atenuação excessiva no sinal óptico',
+        analise_ia: 'A IA detectou atenuação excessiva no sinal óptico (RX: -28.5 dBm), indicando possível problema físico na fibra ou conectores. Tentativas automáticas de correção não foram bem-sucedidas. É necessária intervenção técnica presencial para inspeção física da rede óptica.',
+        testes_executados: testes.map(t => ({ ...t, status: t.nome.includes('Fibra') ? 'error' as const : t.status })),
+        acoes_executadas: [
+          'Tentativa de reprocessamento da conexão',
+          'Análise de histórico de quedas',
+          'Verificação de alarmes na OLT',
+          'Teste de qualidade do sinal óptico',
+          'Classificação automática do problema',
+        ],
+        mensagem: 'Problema requer intervenção técnica. Técnico despachado automaticamente.',
+        proximo_passo: 'Técnico realizará inspeção física da fibra e conectores',
+        tecnico_atribuido: {
+          id: 'TEC-001',
+          nome: 'Carlos Eduardo Silva',
+          regiao: 'Centro',
+          previsao_chegada: 'Hoje, 16:30',
+        },
+        laudo_completo: 'Diagnóstico automático identificou atenuação excessiva no sinal óptico (RX: -28.5 dBm), fora dos padrões aceitáveis. Histórico mostra 3 quedas nas últimas 24h. Tentativas automáticas de reprocessamento não obtiveram sucesso. Sistema classificou como problema físico na rede óptica e despachou automaticamente técnico qualificado da região. Técnico Carlos Eduardo Silva foi atribuído com previsão de chegada para hoje às 16:30.',
+        timestamp: new Date(),
+      };
+    }
   } catch (error) {
-    console.error('Erro ao executar diagnóstico completo:', error);
-    return { success: false, message: 'Erro ao executar diagnóstico' };
+    console.error('Erro ao executar diagnóstico:', error);
+    throw new Error('Falha ao executar diagnóstico automático');
+  }
+}
+
+// Buscar configuração da IA (para integração com API externa)
+export async function buscarConfiguracaoIA() {
+  // Aqui você buscaria do banco de dados a configuração da IA
+  // Por enquanto retorna configuração padrão
+  return {
+    id: '1',
+    nome: 'OpenAI GPT-4',
+    provider: 'openai' as const,
+    api_url: 'https://api.openai.com/v1/chat/completions',
+    api_key: process.env.OPENAI_API_KEY || '',
+    modelo: 'gpt-4',
+    ativo: true,
+    temperatura: 0.7,
+    max_tokens: 2000,
+  };
+}
+
+// Executar análise com IA externa (quando configurada)
+export async function executarAnaliseIA(
+  dadosCliente: ClienteDiagnostico,
+  testesExecutados: TesteAutomatico[]
+): Promise<string> {
+  try {
+    const config = await buscarConfiguracaoIA();
+    
+    if (!config.ativo || !config.api_key) {
+      return 'IA externa não configurada. Usando análise padrão do sistema.';
+    }
+
+    // Preparar prompt para a IA
+    const prompt = `
+Você é um especialista em diagnóstico de redes de fibra óptica para provedores ISP.
+
+Analise os seguintes dados do cliente e testes executados:
+
+CLIENTE:
+- Nome: ${dadosCliente.nome}
+- Plano: ${dadosCliente.plano}
+- Endereço: ${dadosCliente.endereco}
+
+DADOS DE REDE:
+- OLT: ${dadosCliente.dados_fibra.olt}
+- Status ONU: ${dadosCliente.dados_fibra.status_onu}
+- Potência RX: ${dadosCliente.dados_fibra.potencia_rx} dBm
+- Potência TX: ${dadosCliente.dados_fibra.potencia_tx} dBm
+- Alarmes: ${dadosCliente.dados_fibra.alarmes.join(', ') || 'Nenhum'}
+- Quedas recentes: ${dadosCliente.dados_fibra.historico_quedas}
+
+TESTES EXECUTADOS:
+${testesExecutados.map(t => `- ${t.nome}: ${t.status} - ${t.resultado}`).join('\n')}
+
+Forneça uma análise técnica detalhada e determine:
+1. Causa provável do problema
+2. Se pode ser resolvido remotamente ou precisa de técnico
+3. Ações recomendadas
+
+Seja objetivo e técnico.
+`;
+
+    // Fazer requisição para API da IA
+    const response = await fetch(config.api_url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.api_key}`,
+      },
+      body: JSON.stringify({
+        model: config.modelo,
+        messages: [
+          {
+            role: 'system',
+            content: 'Você é um especialista em diagnóstico de redes de fibra óptica.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: config.temperatura,
+        max_tokens: config.max_tokens,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Erro na API da IA');
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    console.error('Erro ao executar análise IA:', error);
+    return 'Erro ao conectar com IA externa. Usando análise padrão do sistema.';
   }
 }

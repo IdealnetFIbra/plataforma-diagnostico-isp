@@ -11,6 +11,30 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   
+  // Configuração Webpack para resolver problemas ESM do Supabase
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      };
+    }
+    
+    // Resolver problemas de ESM com @supabase/supabase-js
+    config.resolve.extensionAlias = {
+      '.js': ['.js', '.ts', '.tsx'],
+      '.mjs': ['.mjs', '.mts'],
+    };
+    
+    return config;
+  },
+  
+  // Transpilar pacotes ESM problemáticos
+  transpilePackages: ['@supabase/supabase-js'],
+  
   // Configuração de imagens para principais provedores
   images: {
     remotePatterns: [
