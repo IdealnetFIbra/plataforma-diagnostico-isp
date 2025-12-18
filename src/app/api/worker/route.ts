@@ -8,29 +8,9 @@ import { supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// Validar se Supabase está configurado
-function isSupabaseConfigured() {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder.supabase.co'
-  );
-}
-
 // Endpoint para ser chamado por cron job ou manualmente
 export async function GET(request: Request) {
   try {
-    // Verificar se Supabase está configurado
-    if (!isSupabaseConfigured()) {
-      return NextResponse.json(
-        {
-          erro: 'Supabase não configurado',
-          mensagem: 'Configure as variáveis de ambiente NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY',
-        },
-        { status: 503 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action') || 'all';
 
@@ -187,17 +167,6 @@ export async function GET(request: Request) {
 // Endpoint POST para ações manuais
 export async function POST(request: Request) {
   try {
-    // Verificar se Supabase está configurado
-    if (!isSupabaseConfigured()) {
-      return NextResponse.json(
-        {
-          erro: 'Supabase não configurado',
-          mensagem: 'Configure as variáveis de ambiente NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY',
-        },
-        { status: 503 }
-      );
-    }
-
     const body = await request.json();
     const { action, os_id } = body;
 

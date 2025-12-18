@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { MapPin, Filter, RefreshCw, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { MapaRotas } from '@/components/custom/mapa-rotas';
 import { buscarOrdensServico, buscarEstatisticasPorBairro, finalizarOrdemServico } from '@/app/actions/rotas-actions';
 import { OrdemServico, EstatisticaBairro, FiltrosRotas } from '@/lib/types-rotas';
 import {
@@ -15,19 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-// Importação dinâmica do mapa (apenas no cliente)
-const MapaRotas = dynamic(
-  () => import('@/components/custom/mapa-rotas').then(mod => mod.MapaRotas),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-[500px]">
-        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    )
-  }
-);
 
 export default function RotasPage() {
   const [ordensServico, setOrdensServico] = useState<OrdemServico[]>([]);
